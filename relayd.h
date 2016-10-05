@@ -36,7 +36,7 @@
 
 #define DEBUG
 #ifdef DEBUG
-#define DPRINTF(level, ...) if (debug >= level) fprintf(stderr, __VA_ARGS__);
+#define DPRINTF(level, ...) do { if (debug >= level) fprintf(stderr, __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(...) do {} while(0)
 #endif
