@@ -42,7 +42,9 @@ static void rtnl_flush(void)
 	if (fd < 0)
 		return;
 
-	write(fd, "-1", 2);
+	if (write(fd, "-1", 2) < 0)
+		perror("rtnl_flush: write");
+
 	close(fd);
 }
 
