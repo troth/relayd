@@ -45,6 +45,9 @@ static int parse_dhcp;
 uint8_t local_addr[4];
 int local_route_table;
 
+static uint8_t managed_src_ip[4];
+static bool managed_src_ip_valid = false;
+
 struct relayd_pending_route {
 	struct relayd_route rt;
 	struct uloop_timeout timeout;
@@ -555,12 +558,16 @@ static int init_interface(struct relayd_interface *rif)
 
 	sll->sll_ifindex = ifr.ifr_ifindex;
 
-	if (ioctl(fd, SIOCGIFADDR, &ifr) < 0) {
+	if (rif->managed && managed_src_ip_valid) {
+		memcpy(rif->src_ip, managed_src_ip, sizeof(rif->src_ip));
+	} else if (ioctl(fd, SIOCGIFADDR, &ifr) < 0) {
 		memcpy(rif->src_ip, DUMMY_IP, sizeof(rif->src_ip));
 	} else {
 		sin = (struct sockaddr_in *) &ifr.ifr_addr;
 		memcpy(rif->src_ip, &sin->sin_addr.s_addr, sizeof(rif->src_ip));
 	}
+
+	DPRINTF(1, "%s: init_interface: "IP_FMT"\n", rif->ifname, IP_BUF(rif->src_ip));
 
 	if (bind(fd, (struct sockaddr *)sll, sizeof(struct sockaddr_ll)) < 0) {
 		perror("bind(ETH_P_ARP)");
@@ -698,6 +705,7 @@ static int usage(const char *progname)
 			"	-D		Enable DHCP forwarding\n"
 			"	-P		Disable DHCP options parsing\n"
 			"	-L <ipaddr>	Enable local access using <ipaddr> as source address\n"
+			"	-s <ipaddr>	Source address to use in arp requests on managed interfaces\n"
 			"\n",
 		progname);
 	return -1;
@@ -728,7 +736,7 @@ int main(int argc, char **argv)
 	parse_dhcp = 1;
 	uloop_init();
 
-	while ((ch = getopt(argc, argv, "I:i:t:p:BDPdT:G:R:L:")) != -1) {
+	while ((ch = getopt(argc, argv, "I:i:t:p:s:BDPdT:G:R:L:")) != -1) {
 		switch(ch) {
 		case 'I':
 			managed = true;
@@ -782,6 +790,14 @@ int main(int argc, char **argv)
 			}
 			memcpy(&local_addr, &addr.s_addr, sizeof(local_addr));
 			local_addr_valid = true;
+			break;
+		case 's':
+			if (!inet_aton(optarg, &addr)) {
+				fprintf(stderr, "Address '%s' not found\n", optarg);
+				return 1;
+			}
+			memcpy(&managed_src_ip, &addr.s_addr, sizeof(managed_src_ip));
+			managed_src_ip_valid = true;
 			break;
 		case 'R':
 			s = strchr(optarg, ':');
